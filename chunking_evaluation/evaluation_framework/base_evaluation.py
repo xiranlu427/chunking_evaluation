@@ -137,17 +137,28 @@ class BaseEvaluation:
                 with open(corpus_path, 'r') as file:
                     corpus = file.read()
     
-            current_documents = splitter.split_text(corpus)
-            current_metadatas = []
-            for document in current_documents:
-                try:
-                    _, start_index, end_index = rigorous_document_search(corpus, document)
-                except:
-                    print(f"Error in finding {document} in {corpus_id}")
-                    raise Exception(f"Error in finding {document} in {corpus_id}")
-                current_metadatas.append({"start_index": start_index, "end_index": end_index, "corpus_id": corpus_id})
-            documents.extend(current_documents)
-            metadatas.extend(current_metadatas)
+            # updated the following lines to accommodate different chunker interfaces
+            if hasattr(splitter, 'split_text'):
+                current_documents = splitter.split_text(corpus)
+                current_metadatas = []
+                for document in current_documents:
+                    try:
+                        _, start_index, end_index = rigorous_document_search(corpus, document)
+                    except:
+                        print(f"Error in finding {document} in {corpus_id}")
+                        raise Exception(f"Error in finding {document} in {corpus_id}")
+                    current_metadatas.append({"start_index": start_index, "end_index": end_index, "corpus_id": corpus_id})
+                documents.extend(current_documents)
+                metadatas.extend(current_metadatas)
+            else:
+                chunks = splitter(corpus)
+                for chunk in chunks:
+                    documents.append(chunk.text)
+                    metadatas.append({
+                        "start_index": chunk.start_index,
+                        "end_index": chunk.end_index,
+                        "corpus_id": corpus_id
+                    })
         return documents, metadatas
 
     def _full_precision_score(self, chunk_metadatas):
@@ -294,7 +305,7 @@ class BaseEvaluation:
         if collection is None:
             try:
                 self.chroma_client.delete_collection(collection_name)
-            except ValueError as e:
+            except Exception as e:
                 pass
             collection = self.chroma_client.create_collection(collection_name, embedding_function=embedding_function, metadata={"hnsw:search_ef":50})
 
@@ -381,7 +392,7 @@ class BaseEvaluation:
             #     print("FAILED TO LOAD GENERAL EVALUATION")
             try:
                 self.chroma_client.delete_collection("auto_questions")
-            except ValueError as e:
+            except Exception as e:
                 pass
             question_collection = self.chroma_client.create_collection("auto_questions", embedding_function=embedding_function, metadata={"hnsw:search_ef":50})
             question_collection.add(
